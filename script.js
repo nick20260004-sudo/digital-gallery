@@ -7,6 +7,11 @@ const navLinks = document.querySelector('.nav-links');
 const storageModal = document.querySelector('#storage-modal');
 const storageTrigger = document.querySelector('.storage-trigger');
 let storageDirectory;
+const downloadsGrid = document.querySelector('#downloads-grid');
+const downloadCount = document.querySelector('#download-count');
+const downloadsEmpty = document.querySelector('.downloads-empty');
+const clearDownloads = document.querySelector('.clear-downloads');
+const savedDownloads = new Map();
 const assetModal = document.createElement('div');
 assetModal.className = 'asset-modal';
 assetModal.setAttribute('role', 'dialog');
@@ -76,8 +81,14 @@ const downloadAsset = (card) => {
   const title = card.querySelector('h3').textContent.trim();
   const category = card.querySelector('.asset-category').textContent.trim();
   const color = getComputedStyle(card.querySelector('.thumbnail')).backgroundColor || '#e9e5ff';
+  const creator = creatorLabel(card);
+  saveDownload({ id: card.dataset.category + '-' + title, title, category, creator, format: card.querySelectorAll('.asset-meta span')[1].textContent.trim(), color });
+  downloadAssetFile({ title, category, creator, color });
+};
+
+const downloadAssetFile = ({ title, category, creator, color }) => {
   const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" rx="36" fill="${color}"/><text x="70" y="110" font-family="Arial,sans-serif" font-size="24" letter-spacing="4" fill="#202229">${category.toUpperCase()}</text><text x="70" y="410" font-family="Georgia,serif" font-size="76" fill="#202229">${title}</text><text x="70" y="730" font-family="Arial,sans-serif" font-size="20" fill="#555">${creatorLabel(card)}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" rx="36" fill="${color}"/><text x="70" y="110" font-family="Arial,sans-serif" font-size="24" letter-spacing="4" fill="#202229">${category.toUpperCase()}</text><text x="70" y="410" font-family="Georgia,serif" font-size="76" fill="#202229">${title}</text><text x="70" y="730" font-family="Arial,sans-serif" font-size="20" fill="#555">${creator}</text></svg>`;
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -88,6 +99,40 @@ const downloadAsset = (card) => {
 };
 
 const creatorLabel = (card) => card.querySelector('.asset-meta span').textContent.trim();
+
+const saveDownload = (asset) => {
+  savedDownloads.set(asset.id, asset);
+  sessionStorage.setItem('digital-gallery-downloads', JSON.stringify([...savedDownloads.values()]));
+  renderDownloads();
+};
+
+const removeDownload = (id) => {
+  savedDownloads.delete(id);
+  sessionStorage.setItem('digital-gallery-downloads', JSON.stringify([...savedDownloads.values()]));
+  renderDownloads();
+};
+
+const renderDownloads = () => {
+  const assets = [...savedDownloads.values()];
+  downloadsGrid.replaceChildren();
+  downloadCount.textContent = assets.length;
+  downloadsEmpty.hidden = assets.length > 0;
+  clearDownloads.disabled = assets.length === 0;
+  assets.forEach((asset) => {
+    const item = document.createElement('article');
+    item.className = 'download-item';
+    item.innerHTML = `<div class="download-swatch" style="background:${asset.color}"></div><div class="download-item-copy"><strong>${asset.title}</strong><small>${asset.category} · ${asset.format}</small><span>${asset.creator}</span></div><button class="redownload" type="button">Save again ↓</button><button class="remove-download" type="button" aria-label="Remove ${asset.title}">×</button>`;
+    item.querySelector('.redownload').addEventListener('click', () => downloadAssetFile(asset));
+    item.querySelector('.remove-download').addEventListener('click', () => removeDownload(asset.id));
+    downloadsGrid.append(item);
+  });
+};
+
+try {
+  JSON.parse(sessionStorage.getItem('digital-gallery-downloads') || '[]').forEach((asset) => savedDownloads.set(asset.id, asset));
+} catch (error) {
+  console.warn('Temporary downloads could not be restored.', error);
+}
 
 const setStorageState = (connected) => {
   storageTrigger.classList.toggle('connected', connected);
@@ -204,6 +249,12 @@ assetDownload.addEventListener('click', () => {
   window.setTimeout(() => { assetDownload.innerHTML = 'Download asset <span>↓</span>'; }, 1800);
 });
 
+clearDownloads.addEventListener('click', () => {
+  savedDownloads.clear();
+  sessionStorage.removeItem('digital-gallery-downloads');
+  renderDownloads();
+});
+
 document.querySelector('#search-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const query = document.querySelector('#asset-search').value.trim().toLowerCase();
@@ -215,3 +266,4 @@ document.querySelector('#search-form').addEventListener('submit', (event) => {
 
 closeStorageModal();
 applyFilters();
+renderDownloads();
