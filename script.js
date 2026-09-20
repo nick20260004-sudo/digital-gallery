@@ -7,6 +7,30 @@ const navLinks = document.querySelector('.nav-links');
 const storageModal = document.querySelector('#storage-modal');
 const storageTrigger = document.querySelector('.storage-trigger');
 let storageDirectory;
+const assetModal = document.createElement('div');
+assetModal.className = 'asset-modal';
+assetModal.setAttribute('role', 'dialog');
+assetModal.setAttribute('aria-modal', 'true');
+assetModal.setAttribute('aria-hidden', 'true');
+assetModal.innerHTML = `
+  <div class="asset-dialog">
+    <button class="asset-modal-close" type="button" aria-label="Close asset preview">×</button>
+    <div class="asset-preview"></div>
+    <div class="asset-dialog-copy">
+      <p class="eyebrow"><span></span> Asset preview</p>
+      <h2 class="asset-dialog-title"></h2>
+      <p class="asset-dialog-description"></p>
+      <div class="asset-dialog-meta"></div>
+      <button class="asset-download" type="button">Download asset <span>↓</span></button>
+    </div>
+  </div>`;
+document.body.append(assetModal);
+const assetPreview = assetModal.querySelector('.asset-preview');
+const assetTitle = assetModal.querySelector('.asset-dialog-title');
+const assetDescription = assetModal.querySelector('.asset-dialog-description');
+const assetMeta = assetModal.querySelector('.asset-dialog-meta');
+const assetDownload = assetModal.querySelector('.asset-download');
+let activeAsset;
 
 const applyFilters = () => {
   cards.forEach((card) => {
@@ -26,6 +50,44 @@ const openStorageModal = () => {
   storageModal.setAttribute('aria-hidden', 'false');
   storageModal.querySelector('.modal-close').focus();
 };
+
+const closeAssetModal = () => {
+  assetModal.classList.remove('open');
+  assetModal.setAttribute('aria-hidden', 'true');
+  activeAsset = null;
+};
+
+const openAssetModal = (card) => {
+  activeAsset = card;
+  const title = card.querySelector('h3').textContent.trim();
+  const category = card.querySelector('.asset-category').textContent.trim();
+  const creator = card.querySelector('.asset-meta span').textContent.trim();
+  const format = card.querySelectorAll('.asset-meta span')[1].textContent.trim();
+  assetTitle.textContent = title;
+  assetDescription.textContent = `A ready-to-use ${category.toLowerCase()} asset ${creator.toLowerCase()}. Preview the artwork here, then download a usable SVG reference file for your project.`;
+  assetMeta.textContent = `${category} · ${creator} · ${format}`;
+  assetPreview.replaceChildren(card.querySelector('.thumbnail').cloneNode(true));
+  assetModal.classList.add('open');
+  assetModal.setAttribute('aria-hidden', 'false');
+  assetModal.querySelector('.asset-modal-close').focus();
+};
+
+const downloadAsset = (card) => {
+  const title = card.querySelector('h3').textContent.trim();
+  const category = card.querySelector('.asset-category').textContent.trim();
+  const color = getComputedStyle(card.querySelector('.thumbnail')).backgroundColor || '#e9e5ff';
+  const safeName = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" rx="36" fill="${color}"/><text x="70" y="110" font-family="Arial,sans-serif" font-size="24" letter-spacing="4" fill="#202229">${category.toUpperCase()}</text><text x="70" y="410" font-family="Georgia,serif" font-size="76" fill="#202229">${title}</text><text x="70" y="730" font-family="Arial,sans-serif" font-size="20" fill="#555">${creatorLabel(card)}</text></svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeName || 'digital-gallery-asset'}.svg`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const creatorLabel = (card) => card.querySelector('.asset-meta span').textContent.trim();
 
 const setStorageState = (connected) => {
   storageTrigger.classList.toggle('connected', connected);
@@ -65,11 +127,16 @@ storageTrigger.addEventListener('click', () => {
 document.querySelector('.connect-button').addEventListener('click', connectStorage);
 document.querySelector('.not-now').addEventListener('click', closeStorageModal);
 document.querySelector('.modal-close').addEventListener('click', closeStorageModal);
+assetModal.querySelector('.asset-modal-close').addEventListener('click', closeAssetModal);
+assetModal.addEventListener('click', (event) => {
+  if (event.target === assetModal) closeAssetModal();
+});
 storageModal.addEventListener('click', (event) => {
   if (event.target === storageModal) closeStorageModal();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && storageModal.classList.contains('open')) closeStorageModal();
+  if (event.key === 'Escape' && assetModal.classList.contains('open')) closeAssetModal();
 });
 
 document.querySelectorAll('.category-chip').forEach((chip) => {
@@ -106,16 +173,35 @@ document.querySelectorAll('.save-button').forEach((button) => {
   });
 });
 
+cards.forEach((card) => {
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('role', 'button');
+  card.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    openAssetModal(card);
+  });
+  card.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target === card) {
+      event.preventDefault();
+      openAssetModal(card);
+    }
+  });
+});
+
 document.querySelectorAll('.download').forEach((button) => {
   button.addEventListener('click', () => {
-    const original = button.innerHTML;
-    button.textContent = 'Added to downloads ✓';
-    button.disabled = true;
-    window.setTimeout(() => {
-      button.innerHTML = original;
-      button.disabled = false;
-    }, 1800);
+    const card = button.closest('.asset-card');
+    downloadAsset(card);
+    button.textContent = 'Downloaded ✓';
+    window.setTimeout(() => { button.innerHTML = 'Download <span>↓</span>'; }, 1800);
   });
+});
+
+assetDownload.addEventListener('click', () => {
+  if (!activeAsset) return;
+  downloadAsset(activeAsset);
+  assetDownload.innerHTML = 'Downloaded <span>✓</span>';
+  window.setTimeout(() => { assetDownload.innerHTML = 'Download asset <span>↓</span>'; }, 1800);
 });
 
 document.querySelector('#search-form').addEventListener('submit', (event) => {
