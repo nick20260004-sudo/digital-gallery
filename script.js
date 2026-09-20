@@ -221,6 +221,14 @@ document.querySelectorAll('.save-button').forEach((button) => {
 cards.forEach((card) => {
   card.setAttribute('tabindex', '0');
   card.setAttribute('role', 'button');
+  const touchPop = () => {
+    card.classList.remove('touch-pop');
+    window.requestAnimationFrame(() => card.classList.add('touch-pop'));
+  };
+  card.addEventListener('pointerdown', (event) => {
+    if (!event.target.closest('button')) touchPop();
+  });
+  card.addEventListener('animationend', () => card.classList.remove('touch-pop'));
   card.addEventListener('click', (event) => {
     if (event.target.closest('button')) return;
     openAssetModal(card);
